@@ -67,13 +67,17 @@ class LCSComparator:
         similarity = (lcs_length / max(min(m, n), 1)) * 100.0
         return lcs_length, similarity
 
-# --- PAGE CONFIG & RESPONSIVE STYLING ---
+# --- CONSTANTS & CONFIGURATION ---
+
+BIN_THRESHOLD = 128
+INK_RATIO = 0.10
+HIGH_MATCH_THRESH = 75.0
+MOD_MATCH_THRESH = 50.0
 
 st.set_page_config(
     page_title="SigVerify Pro | Enterprise Verification",
     page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="auto"
+    layout="wide"
 )
 
 # Responsive Enterprise CSS (Desktop + Mobile Support)
@@ -164,14 +168,12 @@ st.markdown("""
             font-size: 0.85rem !important;
             margin-bottom: 1rem !important;
         }
-        /* Optimize metrics display on mobile */
         [data-testid="stMetricValue"] {
             font-size: 1.25rem !important;
         }
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem !important;
         }
-        /* Mobile tab padding adjustments */
         .stTabs [data-baseweb="tab"] {
             padding: 8px 12px !important;
             font-size: 0.85rem !important;
@@ -179,23 +181,6 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
-# --- SIDEBAR CONFIGURATION ---
-
-with st.sidebar:
-    st.image("https://img.icons8.com/isometric-line/100/4a6cf7/shield.png", width=44)
-    st.title("Control Panel")
-    st.caption("Adjust pipeline settings")
-    
-    st.markdown("**Image Preprocessing**")
-    bin_threshold = st.slider("Binarization Threshold", 50, 200, 128, help="Adjust stroke detection threshold.")
-    
-    st.markdown("**Encoding Parameters**")
-    ink_ratio = st.slider("Ink Threshold Ratio", 0.05, 0.30, 0.10, step=0.01)
-    
-    st.markdown("**Match Tolerances**")
-    high_match_thresh = st.slider("High Match Threshold (%)", 60.0, 90.0, 75.0, step=5.0)
-    mod_match_thresh = st.slider("Moderate Match Threshold (%)", 40.0, 70.0, 50.0, step=5.0)
 
 # --- MAIN CONTENT LAYOUT ---
 
@@ -229,8 +214,8 @@ if file1 and file2:
     
     if st.button("Run Verification Analysis", type="primary", use_container_width=True):
         with st.spinner("Processing signatures..."):
-            converter = ImageToMatrixConverter(threshold=bin_threshold)
-            compressor = MatrixCompressor(ink_threshold_ratio=ink_ratio)
+            converter = ImageToMatrixConverter(threshold=BIN_THRESHOLD)
+            compressor = MatrixCompressor(ink_threshold_ratio=INK_RATIO)
             profiler = MatrixToRowColConverter()
             encoder = RowColCompressor()
             comparator = LCSComparator()
@@ -258,9 +243,9 @@ if file1 and file2:
             m_col1.metric("LCS Match", f"{lcs_len} / 16")
             m_col2.metric("Similarity", f"{sim_score:.1f}%")
             
-            if sim_score >= high_match_thresh:
+            if sim_score >= HIGH_MATCH_THRESH:
                 m_col3.metric("Status", "PASSED", delta="Authentic")
-            elif sim_score >= mod_match_thresh:
+            elif sim_score >= MOD_MATCH_THRESH:
                 m_col3.metric("Status", "REVIEW", delta="Check Required", delta_color="off")
             else:
                 m_col3.metric("Status", "FAILED", delta="High Risk", delta_color="inverse")
@@ -276,10 +261,10 @@ if file1 and file2:
                 st.markdown("**Test Sample Fingerprint**")
                 st.markdown(f'<div class="fp-box">{fp2}</div>', unsafe_allow_html=True)
 
-            # Mobile-optimized Alert Box
-            if sim_score >= high_match_thresh:
+            # Alert Box
+            if sim_score >= HIGH_MATCH_THRESH:
                 st.markdown('<div class="verdict-box verdict-pass">✓ AUTHENTICATION SUCCESSFUL: High structural density match detected.</div>', unsafe_allow_html=True)
-            elif sim_score >= mod_match_thresh:
+            elif sim_score >= MOD_MATCH_THRESH:
                 st.markdown('<div class="verdict-box verdict-warn">⚠️ MODERATE MATCH: Structural variations present. Secondary review recommended.</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="verdict-box verdict-fail">🚨 AUTHENTICATION FAILED: Significant density mismatch. Possible forgery.</div>', unsafe_allow_html=True)
