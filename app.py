@@ -1,13 +1,10 @@
-from flask import Flask, render_template, request, jsonify
+import streamlit as st
 import numpy as np
 from PIL import Image
-import io
-
-app = Flask(__name__)
 
 # --- PIPELINE STAGES ---
 
-# Stage 2: Convert to 64x64 binary matrix
+# Stage 2: Image to Binary Matrix Conversion
 class ImageToMatrixConverter:
     def __init__(self, target_size=(64, 64), threshold=128):
         self.target_size = target_size
@@ -74,52 +71,69 @@ class LCSComparator:
         similarity = (lcs_length / max(min(m, n), 1)) * 100.0
         return lcs_length, similarity
 
-# Pipeline Orchestrator
-def process_images(file1, file2):
-    converter = ImageToMatrixConverter()
-    compressor = MatrixCompressor()
-    profiler = MatrixToRowColConverter()
-    encoder = RowColCompressor()
-    comparator = LCSComparator()
+# --- WEB UI FRONTEND ---
 
-    img1 = Image.open(io.BytesIO(file1.read()))
-    img2 = Image.open(io.BytesIO(file2.read()))
+st.set_page_config(page_title="Signature Verification AI", layout="centered")
 
-    # Signature 1
-    m1 = converter.convert(img1)
-    c1 = compressor.compress(m1)
-    r1_d, c1_d = profiler.profile(c1)
-    fp1 = encoder.compress_to_string(r1_d, c1_d)
+st.title("🖋️ Signature Verification System")
+st.write("Upload two handwritten signatures to extract 16-character fingerprints and calculate LCS similarity.")
 
-    # Signature 2
-    m2 = converter.convert(img2)
-    c2 = compressor.compress(m2)
-    r2_d, c2_d = profiler.profile(c2)
-    fp2 = encoder.compress_to_string(r2_d, c2_d)
+col1, col2 = st.columns(2)
 
-    lcs_len, score = comparator.compute_lcs(fp1, fp2)
+with col1:
+    st.subheader("Signature 1 (Reference)")
+    file1 = st.file_uploader("Upload Image 1", type=["png", "jpg", "jpeg"], key="img1")
 
-    return {
-        "fp1": fp1,
-        "fp2": fp2,
-        "lcs_len": lcs_len,
-        "similarity": round(score, 1)
-    }
+with col2:
+    st.subheader("Signature 2 (Test)")
+    file2 = st.file_uploader("Upload Image 2", type=["png", "jpg", "jpeg"], key="img2")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+if file1 and file2:
+    img1 = Image.open(file1)
+    img2 = Image.open(file2)
 
-@app.route('/api/compare', methods=['POST'])
-def compare_api():
-    if 'img1' not in request.files or 'img2' not in request.files:
-        return jsonify({"error": "Both image files are required."}), 400
+    with col1:
+        st.image(img1, caption="Signature 1", use_container_width=True)
+    with col2:
+        st.image(img2, caption="Signature 2", use_container_width=True)
 
-    file1 = request.files['img1']
-    file2 = request.files['img2']
+    if st.button("Compare Signatures", type="primary"):
+        # Initialize pipeline components
+        converter = ImageToMatrixConverter()
+        compressor = MatrixCompressor()
+        profiler = MatrixToRowColConverter()
+        encoder = RowColCompressor()
+        comparator = LCSComparator()
 
-    results = process_images(file1, file2)
-    return jsonify(results)
+        # Process Image 1
+        mat1 = converter.convert(img1)
+        comp1 = compressor.compress(mat1)
+        r1, c1 = profiler.profile(comp1)
+        fp1 = encoder.compress_to_string(r1, c1)
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+        # Process Image 2
+        mat2 = converter.convert(img2)
+        comp2 = compressor.compress(mat2)
+        r2, c2 = profiler.profile(comp2)
+        fp2 = encoder.compress_to_string(r2, c2)
+
+        # LCS Matching
+        lcs_len, sim_score = comparator.compute_lcs(fp1, fp2)
+
+        st.divider()
+        st.header("Results")
+        
+        res_col1, res_col2 = st.columns(2)
+        with res_col1:
+            st.text(f"Fingerprint 1: {fp1}")
+            st.text(f"Fingerprint 2: {fp2}")
+        with res_col2:
+            st.metric(label="LCS Match Length", value=f"{lcs_len} / 16")
+            st.metric(label="Similarity Score", value=f"{sim_score:.1f}%")
+
+        if sim_score >= 75.0:
+            st.success("Verdict: High Structural Match (Signatures Likely Match)")
+        elif sim_score >= 50.0:
+            st.warning("Verdict: Moderate Match (Manual Verification Recommended)")
+        else:
+            st.error("Verdict: Low Match (Possible Forgery or Variant)")
