@@ -1,3 +1,4 @@
+import streamlit as st
 from flask import Flask, render_template, request, jsonify
 import numpy as np
 from PIL import Image
